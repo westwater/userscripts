@@ -9,13 +9,17 @@
 // @require      http://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js
 // @require      file:///Users/georgewestwater/vault/.userscript.conf.js
 // @require      file:///Users/georgewestwater/userscripts/github/jenkins.js
+// @resource     loading https://github.com/westwater/userscripts/raw/main/resources/jenkins/building.gif
 // @grant        GM_xmlhttpRequest
+// @grant        GM_getResourceText
 // ==/UserScript==
 
 // todo: on `Building...`, show elapsed time and estimated time left
 
 /* globals jQuery, config: false */
 const $j = jQuery.noConflict(true)
+
+const building = "https://github.com/westwater/userscripts/raw/main/resources/jenkins/building.gif"
 
 $j(function () {
     'use strict'
@@ -54,7 +58,7 @@ function renderJenkinsLinks(jenkinsBaseUrl, orgName, repoName) {
             if (index == 0) {
                 $j(this).after(`<p id="build-progress" style="color: #0366d6">Checking...</p>`)
                 renderJenkinsJobProgress(jenkinsBaseUrl, orgName, repoName, version)
-                setInterval(function () { renderJenkinsJobProgress(jenkinsBaseUrl, orgName, repoName, version) }, 15000)
+                setInterval(function () { renderJenkinsJobProgress(jenkinsBaseUrl, orgName, repoName, version) }, 150000)
             }
         }
     });
@@ -71,16 +75,24 @@ function renderJenkinsJobProgress(jenkinsBaseUrl, orgName, repoName, version) {
             httpGet(buildUrl, function (buildResponse) {
                 const build = JSON.parse(buildResponse.responseText)
                 if (build.building) {
-                    $j("#build-progress").html('<p id="build-progress" style="color: #fbca04">Building...</p>')
+                    $j("#build-progress").replaceWith(`<img src="${building}"><p id="build-progress" style="color: #fbca04">Building...</p>`)
                 } else {
                     if (build.result == "SUCCESS") {
-                        $j("#build-progress").html('<p id="build-progress" style="color: green">Build successful</p>')
+                        $j("#build-progress").replaceWith(`<p id="build-progress" style="color: green"><img width="24" src="${building}">Build successful</p>`)
                     } else if (build.result == "ABORTED") {
-                        $j("#build-progress").html('<p id="build-progress" style="color: grey">Build aborted</p>')
+                        $j("#build-progress").replaceWith('<p id="build-progress" style="color: grey">Build aborted</p>')
                     } else {
-                        $j("#build-progress").html('<p id="build-progress" style="color: red">Build failed</p>')
+                        $j("#build-progress").replaceWith('<p id="build-progress" style="color: red">Build failed</p>')
                     }
                 }
+
+                $j("#build-progress").css({
+                    display: "flex",
+                    "justify-content": "center",
+                    top: "50%",
+                    "text-align": "center",
+                    margin: 0
+                });
             })
         } else {
             console.log("no builds yet")
