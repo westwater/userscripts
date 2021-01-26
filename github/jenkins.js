@@ -9,7 +9,7 @@
 // @require      http://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js
 // @require      file:///Users/georgewestwater/vault/.userscript.conf.js
 // @require      file:///Users/georgewestwater/userscripts/github/jenkins.js
-// @grant        GM_xmlhttpReques
+// @grant        GM_xmlhttpRequest
 // ==/UserScript==
 
 /* globals jQuery, config: false */
@@ -20,6 +20,8 @@ const success = "https://github.com/westwater/userscripts/raw/main/resources/jen
 
 $j(function () {
     'use strict'
+
+    GM_addStyle(css())
 
     const orgName = $j("[data-hovercard-type='organization']").text().trim().toLowerCase()
     const repoName = $j("strong[itemprop='name']").text().trim()
@@ -37,7 +39,7 @@ $j(function () {
     }
 });
 
-function preloadResources(){
+function preloadResources() {
     $j("head")
         .append(`<link rel="preload" href="${building}" as="image">`)
         .append(`<link rel="preload" href="${success}" as="image">`)
@@ -79,24 +81,29 @@ function renderJenkinsJobProgress(jenkinsBaseUrl, orgName, repoName, version) {
             httpGet(buildUrl, function (buildResponse) {
                 const build = JSON.parse(buildResponse.responseText)
                 if (build.building) {
-                    $j("#build-progress").replaceWith(`<img width="24" src="${building}"><p id="build-progress" style="color: #fbca04">Building...</p>`)
+                    $j("#build-progress").replaceWith(`
+                            <img class="jenkins-icon" src="${building}">
+                            <p id="build-progress" style="color: #fbca04">Building...</p>
+                        `)
                 } else {
                     if (build.result == "SUCCESS") {
-                        $j("#build-progress").replaceWith(`<p id="build-progress" style="color: green"><img width="24" src="${success}">Build successful</p>`)
+                        $j("#build-progress").replaceWith(`
+                        <p id="build-progress" style="color: green">
+                            Build successful
+                        </p>
+                        <div class="jenkins-container">
+                            <img class="jenkins-icon" src="${success}">
+                            <div id="progress-status"> 
+                                <div id="progress-bar"></div> 
+                            </div>
+                        </div>
+                        `)
                     } else if (build.result == "ABORTED") {
                         $j("#build-progress").replaceWith('<p id="build-progress" style="color: grey">Build aborted</p>')
                     } else {
                         $j("#build-progress").replaceWith('<p id="build-progress" style="color: red">Build failed</p>')
                     }
                 }
-
-                $j("#build-progress").css({
-                    display: "flex",
-                    "justify-content": "center",
-                    top: "50%",
-                    "text-align": "center",
-                    margin: 0
-                });
             })
         } else {
             console.log("no builds yet")
@@ -117,4 +124,51 @@ function httpGet(url, onResponse) {
         },
         onload: onResponse
     });
+}
+
+function css() {
+    return `
+       .jenkins-container {
+            display: flex;
+            justify-content: center;
+            top: 50%;
+            text-align: center;
+        }
+
+        .jenkins-icon {
+            width: 24px;
+            height: 24px;
+        }
+
+        #build-progress {
+            display: flex;
+            justify-content: center;
+            top: 50%;
+            text-align: center;
+            margin: 0
+        }
+
+        #progress-bar {
+            width: 20%;
+            top: 50%;
+            height: 12px;
+            background-color: #0366d6;
+            text-align: center;
+            line-height: 32px;
+            color: black;
+        }
+
+        #progress-status  {
+            display: flex;
+            top: 50%;
+            margin-top: 5px;
+            margin-bottom: 5px;
+            width: 70%;
+            height: 14px;
+            background-color: #fff;
+            border: 2px solid;
+            border-color: #0366d6;
+            float: right;
+        }
+    `
 }
