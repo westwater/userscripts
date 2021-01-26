@@ -52,34 +52,40 @@ function renderJenkinsLinks(jenkinsBaseUrl, orgName, repoName) {
 
             // Only check Jenkins for the latest git release
             if (index == 0) {
-                $j(this).after(`<p id="checking" style="color: #0366d6">Checking...</p>`)
-                const url = `${jenkinsBaseUrl}/job/${orgName}/job/${repoName}/view/tags/job/${version}/api/json?tree=builds[url]`
-
-                httpGet(url, function (response) {
-                    console.log(response.responseText)
-                    const json = JSON.parse(response.responseText)
-                    if (json.builds.length != 0) {
-                        const buildUrl = `${json.builds[0].url}/api/json?tree=building,result`
-
-                        httpGet(buildUrl, function (buildResponse) {
-                            const build = JSON.parse(buildResponse.responseText)
-                            if (build.building) {
-                                $j("#checking").html('<p style="color: #fbca04">Building...</p>')
-                            } else {
-                                if (build.result == "SUCCESS") {
-                                    $j("#checking").html('<p style="color: green">Build successful</p>')
-                                } else {
-                                    $j("#checking").html('<p style="color: red">Build failed</p>')
-                                }
-                            }
-                        })
-                    } else {
-                        console.log("no builds yet")
-                    }
-                })
+                $j(this).after(`<p id="build-progress" style="color: #0366d6">Checking...</p>`)
+                renderJenkinsJobProgress(jenkinsBaseUrl, orgName, repoName, version)
+                setInterval(function () { renderJenkinsJobProgress(jenkinsBaseUrl, orgName, repoName, version) }, 15000)
             }
         }
     });
+}
+
+function renderJenkinsJobProgress(jenkinsBaseUrl, orgName, repoName, version) {
+    const url = `${jenkinsBaseUrl}/job/${orgName}/job/${repoName}/view/tags/job/${version}/api/json?tree=builds[url]`
+
+    httpGet(url, function (response) {
+        const json = JSON.parse(response.responseText)
+        if (json.builds !== undefined && json.builds.length != 0) {
+            const buildUrl = `${json.builds[0].url}/api/json?tree=building,result`
+
+            httpGet(buildUrl, function (buildResponse) {
+                const build = JSON.parse(buildResponse.responseText)
+                if (build.building) {
+                    $j("#build-progress").html('<p id="build-progress" style="color: #fbca04">Building...</p>')
+                } else {
+                    if (build.result == "SUCCESS") {
+                        $j("#build-progress").html('<p id="build-progress" style="color: green">Build successful</p>')
+                    } else if (build.result == "ABORTED") {
+                        $j("#build-progress").html('<p id="build-progress" style="color: grey">Build aborted</p>')
+                    } else {
+                        $j("#build-progress").html('<p id="build-progress" style="color: red">Build failed</p>')
+                    }
+                }
+            })
+        } else {
+            console.log("no builds yet")
+        }
+    })
 }
 
 // jenkins specific http GET
