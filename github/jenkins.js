@@ -62,9 +62,9 @@ function renderJenkinsLinks(jenkinsBaseUrl, orgName, repoName) {
 
             // Only check Jenkins for the latest git release
             if (index == 0) {
-                $j(this).after(`<p id="build-progress" style="color: #0366d6">Checking...</p>`)
+                $j(this).after(`<p id="jenkins-container" style="color: #0366d6">Checking...</p>`)
                 renderJenkinsJobProgress(jenkinsBaseUrl, orgName, repoName, version)
-                setInterval(function () { renderJenkinsJobProgress(jenkinsBaseUrl, orgName, repoName, version) }, 150000)
+                setInterval(function () { renderJenkinsJobProgress(jenkinsBaseUrl, orgName, repoName, version) }, 15000)
             }
         }
     });
@@ -82,26 +82,35 @@ function renderJenkinsJobProgress(jenkinsBaseUrl, orgName, repoName, version) {
                 const build = JSON.parse(buildResponse.responseText)
                 if (build.building) {
                     $j("#build-progress").replaceWith(`
+                        <div id="jenkins-container">
                             <img class="jenkins-icon" src="${building}">
                             <p id="build-progress" style="color: #fbca04">Building...</p>
-                        `)
+                        <\div>`)
                 } else {
                     if (build.result == "SUCCESS") {
-                        $j("#build-progress").replaceWith(`
-                        <p id="build-progress" style="color: green">
-                            Build successful
-                        </p>
-                        <div class="jenkins-container">
-                            <img class="jenkins-icon" src="${success}">
-                            <div id="progress-status"> 
-                                <div id="progress-bar"></div> 
+                        $j("#jenkins-container").replaceWith(`
+                        <div id="jenkins-container">
+                            <p id="build-progress" style="color: green">
+                                Build successful
+                            </p>
+                            <div class="jenkins-build">
+                                <img class="jenkins-icon" src="${success}">
+                                <div id="progress-status"> 
+                                    <div id="progress-bar"></div> 
+                                </div>
                             </div>
                         </div>
                         `)
                     } else if (build.result == "ABORTED") {
-                        $j("#build-progress").replaceWith('<p id="build-progress" style="color: grey">Build aborted</p>')
+                        $j("#build-progress").replaceWith(`
+                        <div id="jenkins-container">
+                            <p id="build-progress" style="color: grey">Build aborted</p>
+                        </div>`)
                     } else {
-                        $j("#build-progress").replaceWith('<p id="build-progress" style="color: red">Build failed</p>')
+                        $j("#build-progress").replaceWith(`
+                        <div id="jenkins-container">
+                            <p id="build-progress" style="color: red">Build failed</p>
+                        <\div>`)
                     }
                 }
             })
@@ -128,7 +137,7 @@ function httpGet(url, onResponse) {
 
 function css() {
     return `
-       .jenkins-container {
+       .jenkins-build {
             display: flex;
             justify-content: center;
             top: 50%;
