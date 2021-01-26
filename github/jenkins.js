@@ -9,17 +9,14 @@
 // @require      http://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js
 // @require      file:///Users/georgewestwater/vault/.userscript.conf.js
 // @require      file:///Users/georgewestwater/userscripts/github/jenkins.js
-// @resource     loading https://github.com/westwater/userscripts/raw/main/resources/jenkins/building.gif
-// @grant        GM_xmlhttpRequest
-// @grant        GM_getResourceText
+// @grant        GM_xmlhttpReques
 // ==/UserScript==
-
-// todo: on `Building...`, show elapsed time and estimated time left
 
 /* globals jQuery, config: false */
 const $j = jQuery.noConflict(true)
 
 const building = "https://github.com/westwater/userscripts/raw/main/resources/jenkins/building.gif"
+const success = "https://github.com/westwater/userscripts/raw/main/resources/jenkins/success.png"
 
 $j(function () {
     'use strict'
@@ -30,6 +27,7 @@ $j(function () {
     const githubToJenkinsMappings = config.github.jenkinsMappings
 
     if (orgName in githubToJenkinsMappings) {
+        preloadResources()
         const jenkinsBaseUrl = githubToJenkinsMappings[orgName].baseUrl
         const tagReleasePath = githubToJenkinsMappings[orgName].tagReleasePath
         renderJenkinsCreateARelease(jenkinsBaseUrl + tagReleasePath)
@@ -38,6 +36,12 @@ $j(function () {
         console.log(`[Tampermonkey] [Github] Jenkins build info - Github org ${orgName} not supported`)
     }
 });
+
+function preloadResources(){
+    $j("head")
+        .append(`<link rel="preload" href="${building}" as="image">`)
+        .append(`<link rel="preload" href="${success}" as="image">`)
+}
 
 function renderJenkinsCreateARelease(tagReleaseUrl) {
     $j(".float-right.hide-sm").each(function () {
@@ -75,10 +79,10 @@ function renderJenkinsJobProgress(jenkinsBaseUrl, orgName, repoName, version) {
             httpGet(buildUrl, function (buildResponse) {
                 const build = JSON.parse(buildResponse.responseText)
                 if (build.building) {
-                    $j("#build-progress").replaceWith(`<img src="${building}"><p id="build-progress" style="color: #fbca04">Building...</p>`)
+                    $j("#build-progress").replaceWith(`<img width="24" src="${building}"><p id="build-progress" style="color: #fbca04">Building...</p>`)
                 } else {
                     if (build.result == "SUCCESS") {
-                        $j("#build-progress").replaceWith(`<p id="build-progress" style="color: green"><img width="24" src="${building}">Build successful</p>`)
+                        $j("#build-progress").replaceWith(`<p id="build-progress" style="color: green"><img width="24" src="${success}">Build successful</p>`)
                     } else if (build.result == "ABORTED") {
                         $j("#build-progress").replaceWith('<p id="build-progress" style="color: grey">Build aborted</p>')
                     } else {
