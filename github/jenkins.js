@@ -15,7 +15,9 @@
 /* globals jQuery, config: false */
 const $j = jQuery.noConflict(true)
 
-const building = "https://github.com/westwater/userscripts/raw/main/resources/jenkins/building.gif"
+const debug = false;
+
+const building = "https://github.com/westwater/userscripts/raw/main/resources/jenkins/building_green.gif"
 const success = "https://github.com/westwater/userscripts/raw/main/resources/jenkins/success.png"
 
 $j(function () {
@@ -38,12 +40,6 @@ $j(function () {
         console.log(`[Tampermonkey] [Github] Jenkins build info - Github org ${orgName} not supported`)
     }
 });
-
-function preloadResources() {
-    $j("head")
-        .append(`<link rel="preload" href="${building}" as="image">`)
-        .append(`<link rel="preload" href="${success}" as="image">`)
-}
 
 function renderJenkinsCreateARelease(tagReleaseUrl) {
     $j(".float-right.hide-sm").each(function () {
@@ -76,41 +72,48 @@ function renderJenkinsJobProgress(jenkinsBaseUrl, orgName, repoName, version) {
     httpGet(url, function (response) {
         const json = JSON.parse(response.responseText)
         if (json.builds !== undefined && json.builds.length != 0) {
-            const buildUrl = `${json.builds[0].url}/api/json?tree=building,result`
+            const buildUrl = `${json.builds[0].url}/api/json?tree=building,result,timestamp`
 
             httpGet(buildUrl, function (buildResponse) {
                 const build = JSON.parse(buildResponse.responseText)
                 if (build.building) {
-                    $j("#build-progress").replaceWith(`
+                    const buildStartMillis = build.timestamp
+                    const currentTimeMillis = new Date().valueOf()
+                    const diff = new Date(currentTimeMillis - buildStartMillis)
+                    const hours = diff.getHours() > 0 ? `${diff.getHours()}h:` : ""
+                    const mins = diff.getMinutes() === 0 & hours === 0 ? "" : `${diff.getMinutes()}m:`
+                    const secs = `${diff.getSeconds()}s`
+                    $j("#jenkins-container").replaceWith(`
                         <div id="jenkins-container">
-                            <img class="jenkins-icon" src="${building}">
-                            <p id="build-progress" style="color: #fbca04">Building...</p>
-                        <\div>`)
-                } else {
-                    if (build.result == "SUCCESS") {
-                        $j("#jenkins-container").replaceWith(`
-                        <div id="jenkins-container">
-                            <p id="build-progress" style="color: green">
-                                Build successful
-                            </p>
+                            <div>Build time: ${hours}${mins}${secs}</div>
                             <div class="jenkins-build">
-                                <img class="jenkins-icon" src="${success}">
+                                <img class="jenkins-icon" src="${building}">
                                 <div id="progress-status"> 
                                     <div id="progress-bar"></div> 
                                 </div>
                             </div>
-                        </div>
-                        `)
-                    } else if (build.result == "ABORTED") {
-                        $j("#build-progress").replaceWith(`
-                        <div id="jenkins-container">
-                            <p id="build-progress" style="color: grey">Build aborted</p>
                         </div>`)
+                } else {
+                    if (build.result == "SUCCESS") {
+                        $j("#jenkins-container").replaceWith(`
+                            <div id="jenkins-container">
+                                <div class="jenkins-build">
+                                    <img class="jenkins-icon" src="${success}">
+                                    <p id="build-progress" style="color: green">
+                                        Build successful
+                                    </p>
+                                </div>
+                            </div>`)
+                    } else if (build.result == "ABORTED") {
+                        $j("#jenkins-container").replaceWith(`
+                            <div id="jenkins-container">
+                                <p id="build-progress" style="color: grey">Build aborted</p>
+                            </div>`)
                     } else {
-                        $j("#build-progress").replaceWith(`
-                        <div id="jenkins-container">
-                            <p id="build-progress" style="color: red">Build failed</p>
-                        <\div>`)
+                        $j("#jenkins-container").replaceWith(`
+                            <div id="jenkins-container">
+                                <p id="build-progress" style="color: red">Build failed</p>
+                            <\div>`)
                     }
                 }
             })
@@ -135,6 +138,12 @@ function httpGet(url, onResponse) {
     });
 }
 
+function preloadResources() {
+    $j("head")
+        .append(`<link rel="preload" href="${building}" as="image">`)
+        .append(`<link rel="preload" href="${success}" as="image">`)
+}
+
 function css() {
     return `
        .jenkins-build {
@@ -142,6 +151,13 @@ function css() {
             justify-content: center;
             top: 50%;
             text-align: center;
+            margin-right: 0;
+        }
+
+        #jenkins-container {
+            ${(debug) ? "border: 2px solid;" : ""}
+            ${(debug) ? "border-color: #0366d6;" : ""}
+            color: #586069;
         }
 
         .jenkins-icon {
