@@ -67,7 +67,7 @@ function renderJenkinsLinks(jenkinsBaseUrl, orgName, repoName) {
 }
 
 function renderJenkinsJobProgress(jenkinsBaseUrl, orgName, repoName, version) {
-    const url = `${jenkinsBaseUrl}/job/${orgName}/job/${repoName}/view/tags/job/${version}/api/json?tree=builds[url]`
+    const url = `${jenkinsBaseUrl}/job/${orgName}/job/${repoName}/view/tags/job/${version}/api/json?tree=builds[url,number]`
 
     httpGet(url, function (response) {
         const json = JSON.parse(response.responseText)
@@ -80,7 +80,7 @@ function renderJenkinsJobProgress(jenkinsBaseUrl, orgName, repoName, version) {
                     const buildStartMillis = build.timestamp
                     const currentTimeMillis = new Date().valueOf()
                     const diff = new Date(currentTimeMillis - buildStartMillis)
-                    const hours = diff.getHours() > 0 ? `${diff.getHours()}h:` : ""
+                    const hours = diff.getUTCHours() > 0 ? `${diff.getUTCHours()}h:` : ""
                     const mins = diff.getMinutes() === 0 & hours === 0 ? "" : `${diff.getMinutes()}m:`
                     const secs = `${diff.getSeconds()}s`
                     $j("#jenkins-container").replaceWith(`
@@ -93,6 +93,9 @@ function renderJenkinsJobProgress(jenkinsBaseUrl, orgName, repoName, version) {
                                 </div>
                             </div>
                         </div>`)
+                    $j("#progress-status").on('click', function () {
+                        location.href = json.builds[0].url + "console"
+                    });
                 } else {
                     if (build.result == "SUCCESS") {
                         $j("#jenkins-container").replaceWith(`
@@ -194,6 +197,7 @@ function css() {
             border: 2px solid;
             border-color: #0366d6;
             float: right;
+            cursor: pointer;
         }
     `
 }
