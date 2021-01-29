@@ -12,13 +12,18 @@
 // @grant        GM_xmlhttpRequest
 // ==/UserScript==
 
+// todo: Poll jenkins for new releases - if browser is behind, refresh
+
 /* globals jQuery, config: false */
 const $j = jQuery.noConflict(true)
 
 const debug = false;
 
-const building = "https://github.com/westwater/userscripts/raw/main/resources/jenkins/building_green.gif"
-const success = "https://github.com/westwater/userscripts/raw/main/resources/jenkins/success.png"
+const jenkinsIcons = {
+    building: "https://github.com/westwater/userscripts/raw/main/resources/jenkins/building_green.gif",
+    success: "https://github.com/westwater/userscripts/raw/main/resources/jenkins/success.png",
+    aborted: "https://github.com/westwater/userscripts/raw/main/resources/jenkins/aborted.png"
+}
 
 $j(function () {
     'use strict'
@@ -34,6 +39,7 @@ $j(function () {
         preloadResources()
         const jenkinsBaseUrl = githubToJenkinsMappings[orgName].baseUrl
         const tagReleasePath = githubToJenkinsMappings[orgName].tagReleasePath
+        renderJenkinsMasterBuildProgress(jenkinsBaseUrl, orgName, repoName)
         renderJenkinsCreateARelease(jenkinsBaseUrl + tagReleasePath)
         renderJenkinsLinks(jenkinsBaseUrl, orgName, repoName)
     } else {
@@ -45,6 +51,30 @@ function renderJenkinsCreateARelease(tagReleaseUrl) {
     $j(".float-right.hide-sm").each(function () {
         const style = "color: #0366d6; border-color: #0366d6;"
         $j(this).prepend(`<a href="${tagReleaseUrl}" class="btn" style="${style}">Create a release on Jenkins</a>`)
+    })
+}
+
+function renderJenkinsMasterBuildProgress(jenkinsBaseUrl, orgName, repoName) {
+    const url = `${jenkinsBaseUrl}/job/${orgName}/job/${repoName}/view/tags/job/master/api/json?tree=builds[url,number]`
+
+    httpGet(url, function (response) {
+        const json = JSON.parse(response.responseText)
+        if (json.builds !== undefined && json.builds.length != 0) {
+            // only check latest build
+            const buildUrl = `${json.builds[0].url}/api/json?tree=building,result,timestamp`
+
+            httpGet(buildUrl, function (buildResponse) {
+                const build = JSON.parse(buildResponse.responseText)
+                console.log(build)
+                $j("div.subnav").after(`
+                    <div id="master-build" class="jenkins-container">
+
+                    </div>
+                `)
+            })
+        } else {
+            console.log(`no master builds found for ${orgName}/${repoName}`)
+        }
     })
 }
 
@@ -63,7 +93,7 @@ function renderJenkinsLinks(jenkinsBaseUrl, orgName, repoName) {
                 setInterval(function () { renderJenkinsJobProgress(jenkinsBaseUrl, orgName, repoName, version) }, 15000)
             }
         }
-    });
+    })
 }
 
 function renderJenkinsJobProgress(jenkinsBaseUrl, orgName, repoName, version) {
@@ -72,36 +102,46 @@ function renderJenkinsJobProgress(jenkinsBaseUrl, orgName, repoName, version) {
     httpGet(url, function (response) {
         const json = JSON.parse(response.responseText)
         if (json.builds !== undefined && json.builds.length != 0) {
-            const buildUrl = `${json.builds[0].url}/api/json?tree=building,result,timestamp`
+            // only check latest build
+            const buildUrl = `${json.builds[0].url}/api/json?tree=building,result,timestamp,estimatedDuration`
 
             httpGet(buildUrl, function (buildResponse) {
                 const build = JSON.parse(buildResponse.responseText)
                 if (build.building) {
-                    const buildStartMillis = build.timestamp
                     const currentTimeMillis = new Date().valueOf()
-                    const diff = new Date(currentTimeMillis - buildStartMillis)
-                    const hours = diff.getUTCHours() > 0 ? `${diff.getUTCHours()}h:` : ""
-                    const mins = diff.getMinutes() === 0 & hours === 0 ? "" : `${diff.getMinutes()}m:`
-                    const secs = `${diff.getSeconds()}s`
+                    const buildTime = diffTime(build.timestamp, currentTimeMillis)
                     $j("#jenkins-container").replaceWith(`
                         <div id="jenkins-container">
-                            <div>Build time: ${hours}${mins}${secs}</div>
+                            <div>Build time: ${buildTime.time}</div>
                             <div class="jenkins-build">
-                                <img class="jenkins-icon" src="${building}">
-                                <div id="progress-status"> 
+                                <img class="jenkins-icon" src="${jenkinsIcons.building}">
+                                <div id="progress-status">
                                     <div id="progress-bar"></div> 
                                 </div>
                             </div>
                         </div>`)
                     $j("#progress-status").on('click', function () {
                         location.href = json.builds[0].url + "console"
-                    });
+                    })
+                    if (build.estimatedDuration === -1) {
+                        const buildPlus15Mins = build.timestamp + 900000
+                        const perc = Math.round(build.timestamp / buildPlus15Mins * 100)
+                        $j("#progress-bar").css({
+                            width: `${perc}%`
+                        })
+                    } else {
+                        const estimatedBuildTime = build.timestamp + build.estimatedDuration
+                        const perc = Math.round(build.timestamp / estimatedBuildTime * 100)
+                        $j("#progress-bar").css({
+                            width: `${perc}%`
+                        })
+                    }
                 } else {
                     if (build.result == "SUCCESS") {
                         $j("#jenkins-container").replaceWith(`
                             <div id="jenkins-container">
                                 <div class="jenkins-build">
-                                    <img class="jenkins-icon" src="${success}">
+                                    <img class="jenkins-icon" src="${jenkinsIcons.success}">
                                     <p id="build-progress" style="color: green">
                                         Build successful
                                     </p>
@@ -110,7 +150,12 @@ function renderJenkinsJobProgress(jenkinsBaseUrl, orgName, repoName, version) {
                     } else if (build.result == "ABORTED") {
                         $j("#jenkins-container").replaceWith(`
                             <div id="jenkins-container">
-                                <p id="build-progress" style="color: grey">Build aborted</p>
+                                <div class="jenkins-build">
+                                    <img class="jenkins-icon" src="${jenkinsIcons.aborted}">
+                                    <p id="build-progress" style="color: grey">
+                                        Build aborted
+                                    </p>
+                                </div>
                             </div>`)
                     } else {
                         $j("#jenkins-container").replaceWith(`
@@ -141,10 +186,28 @@ function httpGet(url, onResponse) {
     });
 }
 
+function diffTime(start, end) {
+    if (start < end) {
+        const diff = new Date(end - start)
+        const hours = diff.getUTCHours() > 0 ? `${diff.getUTCHours()}h:` : ""
+        const mins = diff.getMinutes() === 0 & hours === 0 ? "" : `${diff.getMinutes()}m:`
+        const secs = `${diff.getSeconds()}s`
+        return {
+            hours: hours,
+            mins: mins,
+            secs: secs,
+            time: hours + mins + secs
+        }
+    } else {
+        throw "diffTime: start needs to be less than end"
+    }
+}
+
 function preloadResources() {
     $j("head")
-        .append(`<link rel="preload" href="${building}" as="image">`)
-        .append(`<link rel="preload" href="${success}" as="image">`)
+        .append(`<link rel="preload" href="${jenkinsIcons.building}" as="image">`)
+        .append(`<link rel="preload" href="${jenkinsIcons.success}" as="image">`)
+        .append(`<link rel="preload" href="${jenkinsIcons.aborted}" as="image">`)
 }
 
 function css() {
@@ -155,6 +218,13 @@ function css() {
             top: 50%;
             text-align: center;
             margin-right: 0;
+        }
+
+        .master-build {
+            display: flex;
+            justify-content: center;
+            top: 50%;
+            text-align: center;
         }
 
         #jenkins-container {
