@@ -8,22 +8,20 @@
 // @include      /^http[s]{0,1}:\/\/.*github.*\/releases$/
 // @require      http://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js
 // @require      file:///Users/georgewestwater/vault/.userscript.conf.js
+// @require      file:///Users/georgewestwater/userscripts/lib/jenkins.js
 // @require      file:///Users/georgewestwater/userscripts/github/jenkins.js
 // @grant        GM_xmlhttpRequest
 // ==/UserScript==
 
-// todo: Poll jenkins for new releases - if browser is behind, refresh
+// todo: 
+// - Poll jenkins for new releases - if browser is behind, refresh
+// - Make building progress bar better - Jenkins claculates estimatedDuration based on the average of the last 3 green builds
+//                                     - since tags should only be built once, the average should be taken from the previous 3 releases
 
 /* globals jQuery, config: false */
 const $j = jQuery.noConflict(true)
 
 const debug = false;
-
-const jenkinsIcons = {
-    building: "https://github.com/westwater/userscripts/raw/main/resources/jenkins/building_green.gif",
-    success: "https://github.com/westwater/userscripts/raw/main/resources/jenkins/success.png",
-    aborted: "https://github.com/westwater/userscripts/raw/main/resources/jenkins/aborted.png"
-}
 
 $j(function () {
     'use strict'
@@ -66,11 +64,36 @@ function renderJenkinsMasterBuildProgress(jenkinsBaseUrl, orgName, repoName) {
             httpGet(buildUrl, function (buildResponse) {
                 const build = JSON.parse(buildResponse.responseText)
                 console.log(build)
-                $j("div.subnav").after(`
-                    <div id="master-build" class="jenkins-container">
-
-                    </div>
-                `)
+                const currentTimeMillis = new Date().valueOf()
+                    const buildTime = diffTime(build.timestamp, currentTimeMillis)
+                if (build.building) {
+                    $j("div.subnav").after(`
+                        <div id="master-build" class="jenkins-container">
+                            <div>Master</div>
+                            <div>Build time: ${buildTime.time}</div>
+                            <div class="jenkins-build">
+                                <img class="jenkins-icon" src="${Jenkins.icons.building}">
+                                <div id="progress-status">
+                                    <div id="progress-bar"></div> 
+                                </div>
+                            </div>
+                        </div>
+                    `)
+                } else {
+                    if (build.result == "SUCCESS") {
+                        $j("div.subnav").after(`
+                            <div id="master-build" class="jenkins-container">
+                                <p>master success</p>
+                            </div>
+                        `)
+                    } else {
+                        $j("div.subnav").after(`
+                            <div id="master-build" class="jenkins-container">
+                                <p>master failed</p>
+                            </div>
+                        `)
+                    }
+                }
             })
         } else {
             console.log(`no master builds found for ${orgName}/${repoName}`)
@@ -114,7 +137,7 @@ function renderJenkinsJobProgress(jenkinsBaseUrl, orgName, repoName, version) {
                         <div id="jenkins-container">
                             <div>Build time: ${buildTime.time}</div>
                             <div class="jenkins-build">
-                                <img class="jenkins-icon" src="${jenkinsIcons.building}">
+                                <img class="jenkins-icon" src="${Jenkins.icons.building}">
                                 <div id="progress-status">
                                     <div id="progress-bar"></div> 
                                 </div>
@@ -141,7 +164,7 @@ function renderJenkinsJobProgress(jenkinsBaseUrl, orgName, repoName, version) {
                         $j("#jenkins-container").replaceWith(`
                             <div id="jenkins-container">
                                 <div class="jenkins-build">
-                                    <img class="jenkins-icon" src="${jenkinsIcons.success}">
+                                    <img class="jenkins-icon" src="${Jenkins.icons.success}">
                                     <p id="build-progress" style="color: green">
                                         Build successful
                                     </p>
@@ -151,7 +174,7 @@ function renderJenkinsJobProgress(jenkinsBaseUrl, orgName, repoName, version) {
                         $j("#jenkins-container").replaceWith(`
                             <div id="jenkins-container">
                                 <div class="jenkins-build">
-                                    <img class="jenkins-icon" src="${jenkinsIcons.aborted}">
+                                    <img class="jenkins-icon" src="${Jenkins.icons.aborted}">
                                     <p id="build-progress" style="color: grey">
                                         Build aborted
                                     </p>
@@ -205,9 +228,9 @@ function diffTime(start, end) {
 
 function preloadResources() {
     $j("head")
-        .append(`<link rel="preload" href="${jenkinsIcons.building}" as="image">`)
-        .append(`<link rel="preload" href="${jenkinsIcons.success}" as="image">`)
-        .append(`<link rel="preload" href="${jenkinsIcons.aborted}" as="image">`)
+        .append(`<link rel="preload" href="${Jenkins.icons.building}" as="image">`)
+        .append(`<link rel="preload" href="${Jenkins.icons.success}" as="image">`)
+        .append(`<link rel="preload" href="${Jenkins.icons.aborted}" as="image">`)
 }
 
 function css() {
