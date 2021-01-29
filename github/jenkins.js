@@ -60,12 +60,10 @@ function renderJenkinsMasterBuildProgress(jenkinsBaseUrl, orgName, repoName) {
         if (json.builds !== undefined && json.builds.length != 0) {
             // only check latest build
             const buildUrl = `${json.builds[0].url}/api/json?tree=building,result,timestamp`
-
             httpGet(buildUrl, function (buildResponse) {
                 const build = JSON.parse(buildResponse.responseText)
-                console.log(build)
                 const currentTimeMillis = new Date().valueOf()
-                    const buildTime = diffTime(build.timestamp, currentTimeMillis)
+                const buildTime = diffTime(build.timestamp, currentTimeMillis)
                 if (build.building) {
                     $j("div.subnav").after(`
                         <div id="master-build" class="jenkins-container">
@@ -102,7 +100,7 @@ function renderJenkinsMasterBuildProgress(jenkinsBaseUrl, orgName, repoName) {
 }
 
 function renderJenkinsLinks(jenkinsBaseUrl, orgName, repoName) {
-    $j("li.d-block.mb-1").each(function (index) {
+    $j("li.d-block.mb-1").each(async function (index) {
         const version = $j(this).find("a.muted-link.css-truncate").first().attr("title")
 
         if (version !== undefined) {
@@ -112,28 +110,22 @@ function renderJenkinsLinks(jenkinsBaseUrl, orgName, repoName) {
             // Only check Jenkins for the latest git release
             if (index == 0) {
                 $j(this).after(`<p id="jenkins-container" style="color: #0366d6">Checking...</p>`)
-                renderJenkinsJobProgress(jenkinsBaseUrl, orgName, repoName, version)
-                setInterval(function () { renderJenkinsJobProgress(jenkinsBaseUrl, orgName, repoName, version) }, 15000)
+                await renderJenkinsJobProgress(jenkinsBaseUrl, orgName, repoName, version)
+                setInterval(async function () { await renderJenkinsJobProgress(jenkinsBaseUrl, orgName, repoName, version) }, 15000)
             }
         }
     })
 }
 
-function renderJenkinsJobProgress(jenkinsBaseUrl, orgName, repoName, version) {
-    const url = `${jenkinsBaseUrl}/job/${orgName}/job/${repoName}/view/tags/job/${version}/api/json?tree=builds[url,number]`
+async function renderJenkinsJobProgress(jenkinsBaseUrl, orgName, repoName, version) {
+    const buildUrl = `${jenkinsBaseUrl}/job/${orgName}/job/${repoName}/view/tags/job/${version}`
 
-    httpGet(url, function (response) {
-        const json = JSON.parse(response.responseText)
-        if (json.builds !== undefined && json.builds.length != 0) {
-            // only check latest build
-            const buildUrl = `${json.builds[0].url}/api/json?tree=building,result,timestamp,estimatedDuration`
-
-            httpGet(buildUrl, function (buildResponse) {
-                const build = JSON.parse(buildResponse.responseText)
-                if (build.building) {
-                    const currentTimeMillis = new Date().valueOf()
-                    const buildTime = diffTime(build.timestamp, currentTimeMillis)
-                    $j("#jenkins-container").replaceWith(`
+    const build = await Jenkins.multibranch.getLatestBuild(buildUrl)
+    if (build) {
+        if (build.building) {
+            const currentTimeMillis = new Date().valueOf()
+            const buildTime = diffTime(build.timestamp, currentTimeMillis)
+            $j("#jenkins-container").replaceWith(`
                         <div id="jenkins-container">
                             <div>Build time: ${buildTime.time}</div>
                             <div class="jenkins-build">
@@ -143,25 +135,25 @@ function renderJenkinsJobProgress(jenkinsBaseUrl, orgName, repoName, version) {
                                 </div>
                             </div>
                         </div>`)
-                    $j("#progress-status").on('click', function () {
-                        location.href = json.builds[0].url + "console"
-                    })
-                    if (build.estimatedDuration === -1) {
-                        const buildPlus15Mins = build.timestamp + 900000
-                        const perc = Math.round(build.timestamp / buildPlus15Mins * 100)
-                        $j("#progress-bar").css({
-                            width: `${perc}%`
-                        })
-                    } else {
-                        const estimatedBuildTime = build.timestamp + build.estimatedDuration
-                        const perc = Math.round(build.timestamp / estimatedBuildTime * 100)
-                        $j("#progress-bar").css({
-                            width: `${perc}%`
-                        })
-                    }
-                } else {
-                    if (build.result == "SUCCESS") {
-                        $j("#jenkins-container").replaceWith(`
+            $j("#progress-status").on('click', function () {
+                location.href = buildUrl + "console"
+            })
+            if (build.estimatedDuration === -1) {
+                const buildPlus15Mins = build.timestamp + 900000
+                const perc = Math.round(build.timestamp / buildPlus15Mins * 100)
+                $j("#progress-bar").css({
+                    width: `${perc}%`
+                })
+            } else {
+                const estimatedBuildTime = build.timestamp + build.estimatedDuration
+                const perc = Math.round(build.timestamp / estimatedBuildTime * 100)
+                $j("#progress-bar").css({
+                    width: `${perc}%`
+                })
+            }
+        } else {
+            if (build.result == "SUCCESS") {
+                $j("#jenkins-container").replaceWith(`
                             <div id="jenkins-container">
                                 <div class="jenkins-build">
                                     <img class="jenkins-icon" src="${Jenkins.icons.success}">
@@ -170,8 +162,8 @@ function renderJenkinsJobProgress(jenkinsBaseUrl, orgName, repoName, version) {
                                     </p>
                                 </div>
                             </div>`)
-                    } else if (build.result == "ABORTED") {
-                        $j("#jenkins-container").replaceWith(`
+            } else if (build.result == "ABORTED") {
+                $j("#jenkins-container").replaceWith(`
                             <div id="jenkins-container">
                                 <div class="jenkins-build">
                                     <img class="jenkins-icon" src="${Jenkins.icons.aborted}">
@@ -180,18 +172,16 @@ function renderJenkinsJobProgress(jenkinsBaseUrl, orgName, repoName, version) {
                                     </p>
                                 </div>
                             </div>`)
-                    } else {
-                        $j("#jenkins-container").replaceWith(`
+            } else {
+                $j("#jenkins-container").replaceWith(`
                             <div id="jenkins-container">
                                 <p id="build-progress" style="color: red">Build failed</p>
                             <\div>`)
-                    }
-                }
-            })
-        } else {
-            console.log("no builds yet")
+            }
         }
-    })
+    } else {
+        console.log(`no builds found for ${buildUrl}`)
+    }
 }
 
 // jenkins specific http GET
