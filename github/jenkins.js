@@ -23,27 +23,34 @@ const $j = jQuery.noConflict(true)
 
 const debug = false;
 
-$j(function () {
+$j(async function () {
     'use strict'
 
     GM_addStyle(css())
 
     const orgName = $j("[data-hovercard-type='organization']").text().trim().toLowerCase()
-    const repoName = $j("strong[itemprop='name']").text().trim()
+    const repoName = $j("strong[itemprop='name']").text().trim().toLowerCase()
 
     const githubToJenkinsMappings = config.github.jenkinsMappings
 
     if (orgName in githubToJenkinsMappings) {
         preloadResources()
         const jenkinsBaseUrl = githubToJenkinsMappings[orgName].baseUrl
-        const tagReleasePath = githubToJenkinsMappings[orgName].tagReleasePath
         renderJenkinsMasterBuildProgress(jenkinsBaseUrl, orgName, repoName)
-        renderJenkinsCreateARelease(jenkinsBaseUrl + tagReleasePath)
         renderJenkinsLinks(jenkinsBaseUrl, orgName, repoName)
+
+        // repo specific
+        if (repoName in githubToJenkinsMappings[orgName]) {
+
+            if ("tagReleasePath" in githubToJenkinsMappings[orgName][repoName]) {
+                const tagReleasePath = githubToJenkinsMappings[orgName][repoName].tagReleasePath
+                renderJenkinsCreateARelease(jenkinsBaseUrl + tagReleasePath)
+            }
+        }
     } else {
         console.log(`[Tampermonkey] [Github] Jenkins build info - Github org ${orgName} not supported`)
     }
-});
+})
 
 function renderJenkinsCreateARelease(tagReleaseUrl) {
     $j(".float-right.hide-sm").each(function () {
@@ -52,51 +59,48 @@ function renderJenkinsCreateARelease(tagReleaseUrl) {
     })
 }
 
-function renderJenkinsMasterBuildProgress(jenkinsBaseUrl, orgName, repoName) {
-    const url = `${jenkinsBaseUrl}/job/${orgName}/job/${repoName}/view/tags/job/master/api/json?tree=builds[url,number]`
+async function renderJenkinsMasterBuildProgress(jenkinsBaseUrl, orgName, repoName) {
+    const url = `${jenkinsBaseUrl}/job/${orgName}/job/${repoName}/view/tags/job/master`
 
-    httpGet(url, function (response) {
-        const json = JSON.parse(response.responseText)
-        if (json.builds !== undefined && json.builds.length != 0) {
-            // only check latest build
-            const buildUrl = `${json.builds[0].url}/api/json?tree=building,result,timestamp`
-            httpGet(buildUrl, function (buildResponse) {
-                const build = JSON.parse(buildResponse.responseText)
-                const currentTimeMillis = new Date().valueOf()
-                const buildTime = diffTime(build.timestamp, currentTimeMillis)
-                if (build.building) {
-                    $j("div.subnav").after(`
-                        <div id="master-build" class="jenkins-container">
-                            <div>Master</div>
-                            <div>Build time: ${buildTime.time}</div>
-                            <div class="jenkins-build">
-                                <img class="jenkins-icon" src="${Jenkins.icons.building}">
-                                <div id="progress-status">
-                                    <div id="progress-bar"></div> 
-                                </div>
-                            </div>
+    const build = await Jenkins.multibranch.getLatestBuild(url)
+
+    if (build) {
+        if (build.building) {
+            const currentTimeMillis = new Date().valueOf()
+            const buildTime = diffTime(build.timestamp, currentTimeMillis)
+            $j("div.subnav").after(`
+                <div id="master-build" class="jenkins-container">
+                    <div>Master</div>
+                    <div>Build time: ${buildTime.time}</div>
+                    <div class="jenkins-build">
+                        <img class="jenkins-icon" src="${Jenkins.icons.building}">
+                        <div id="progress-status">
+                            <div id="progress-bar"></div> 
                         </div>
-                    `)
-                } else {
-                    if (build.result == "SUCCESS") {
-                        $j("div.subnav").after(`
-                            <div id="master-build" class="jenkins-container">
-                                <p>master success</p>
-                            </div>
-                        `)
-                    } else {
-                        $j("div.subnav").after(`
-                            <div id="master-build" class="jenkins-container">
-                                <p>master failed</p>
-                            </div>
-                        `)
-                    }
-                }
-            })
+                    </div>
+                </div>
+            `)
         } else {
-            console.log(`no master builds found for ${orgName}/${repoName}`)
+            if (build.result == "SUCCESS") {
+                $j("div.subnav").after(`
+                    <div id="master-build" class="jenkins-container">
+                        <p>master success</p>
+                    </div>
+                `)
+            } else {
+                $j("div.subnav").after(`
+                    <div id="master-build" class="jenkins-container">
+                        <p>master failed</p>
+                    </div>
+                `)
+            }
         }
-    })
+        $j("#master-build").on('click', function () {
+            location.href = url
+        })
+    } else {
+        console.log(`no master builds found for ${orgName}/${repoName}`)
+    }
 }
 
 function renderJenkinsLinks(jenkinsBaseUrl, orgName, repoName) {
@@ -241,6 +245,12 @@ function css() {
         }
 
         #jenkins-container {
+            ${(debug) ? "border: 2px solid;" : ""}
+            ${(debug) ? "border-color: #0366d6;" : ""}
+            color: #586069;
+        }
+
+        .jenkins-container {
             ${(debug) ? "border: 2px solid;" : ""}
             ${(debug) ? "border-color: #0366d6;" : ""}
             color: #586069;
